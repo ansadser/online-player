@@ -124,7 +124,16 @@ export default function Home() {
   };
   const fullscreen = async () => {
     const el = document.querySelector(".player-shell") as HTMLElement | null;
-    if (!document.fullscreenElement) await el?.requestFullscreen(); else await document.exitFullscreen();
+    if (!el) return;
+    if (!document.fullscreenElement) {
+      if (el.requestFullscreen) await el.requestFullscreen();
+      else {
+        const v = videoRef.current as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null;
+        v?.webkitEnterFullscreen?.();
+      }
+    } else {
+      await document.exitFullscreen();
+    }
   };
   const selectAudio = (id: number) => {
     const hls = hlsRef.current;
