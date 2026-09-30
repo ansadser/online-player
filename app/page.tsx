@@ -156,6 +156,12 @@ export default function Home() {
     if (hls) { hls.audioTrack = id; setActiveAudio(id); }
     setMenu(null);
   };
+  const syncNativeSubtitleTracks = () => {
+    const tracks = videoRef.current?.textTracks;
+    if (!tracks) return;
+    const items = Array.from(tracks).map((t, id) => ({ id, name: t.label, lang: t.language }));
+    if (items.length) setSubtitleTracks(items);
+  };
   const selectSubtitle = (id: number) => {
     const hls = hlsRef.current;
     const v = videoRef.current;
@@ -211,7 +217,7 @@ export default function Home() {
             onCanPlay={()=>setError("")}
             onPause={()=>setPlaying(false)}
             onTimeUpdate={()=>{if(!isSeeking)setCurrent(videoRef.current?.currentTime||0);setError("")}}
-            onLoadedMetadata={()=>setDuration(videoRef.current?.duration||0)}
+            onLoadedMetadata={()=>{setDuration(videoRef.current?.duration||0); syncNativeSubtitleTracks();}}
             onError={(e)=>{
               const v=e.currentTarget;
               window.setTimeout(()=>{
