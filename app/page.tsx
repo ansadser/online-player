@@ -34,6 +34,8 @@ export default function Home() {
   const [playing, setPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [current, setCurrent] = useState(0);
+  const [seekPreview, setSeekPreview] = useState<number | null>(null);
+  const [isSeeking, setIsSeeking] = useState(false);
   const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
   const [rate, setRate] = useState(1);
@@ -110,7 +112,14 @@ export default function Home() {
     playSource(clean, clean.split("/").pop()?.split("?")[0] || "Stream", isHls ? "hls" : "url");
   };
 
-  const seek = (value: number) => { if (videoRef.current) videoRef.current.currentTime = value; };
+  const seek = (value: number) => {
+    const v = videoRef.current;
+    if (!v || !Number.isFinite(value)) return;
+    v.currentTime = value;
+    setCurrent(value);
+    setSeekPreview(null);
+  };
+  const seekPreviewValue = seekPreview ?? current;
   const togglePlay = async () => {
     const v = videoRef.current;
     if (!v || (!v.src && !hlsRef.current)) return;
@@ -174,7 +183,7 @@ export default function Home() {
             onPlaying={()=>setError("")}
             onCanPlay={()=>setError("")}
             onPause={()=>setPlaying(false)}
-            onTimeUpdate={()=>{setCurrent(videoRef.current?.currentTime||0);setError("")}}
+            onTimeUpdate={()=>{if(!isSeeking)setCurrent(videoRef.current?.currentTime||0);setError("")}}
             onLoadedMetadata={()=>setDuration(videoRef.current?.duration||0)}
             onError={(e)=>{
               const v=e.currentTarget;
@@ -194,7 +203,11 @@ export default function Home() {
           {error && <div className="player-error"><strong>Playback error</strong><span>{error}</span></div>}
 
           <div className="controls">
-            <input className="seek" type="range" min="0" max={duration||0} step="0.01" value={Math.min(current,duration||0)} onChange={e=>seek(Number(e.target.value))}/>
+            <input className="seek" type="range" min="0" max={duration||0} step="0.01" value={Math.min(seekPreviewValue,duration||0)}
+              onPointerDown={()=>setIsSeeking(true)}
+              onChange={e=>setSeekPreview(Number(e.target.value))}
+              onPointerUp={e=>{setIsSeeking(false);seek(Number((e.target as HTMLInputElement).value))}}
+              onKeyUp={e=>{if(["ArrowLeft","ArrowRight","Home","End"].includes(e.key)) seek(Number((e.target as HTMLInputElement).value))}}/>
             <div className="control-row">
               <div className="left-controls">
                 <button onClick={togglePlay} aria-label="Play/Pause">{playing ? <Pause fill="currentColor"/> : <Play fill="currentColor"/>}</button>
