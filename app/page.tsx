@@ -112,8 +112,9 @@ export default function Home() {
 
   const seek = (value: number) => { if (videoRef.current) videoRef.current.currentTime = value; };
   const togglePlay = async () => {
-    if (!videoRef.current?.src && !hlsRef.current) return;
-    if (videoRef.current.paused) await videoRef.current.play(); else videoRef.current.pause();
+    const v = videoRef.current;
+    if (!v || (!v.src && !hlsRef.current)) return;
+    if (v.paused) await v.play(); else v.pause();
   };
   const setSpeed = (n: number) => { setRate(n); if (videoRef.current) videoRef.current.playbackRate = n; setMenu(null); };
   const togglePiP = async () => {
