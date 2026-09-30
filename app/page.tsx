@@ -164,7 +164,11 @@ export default function Home() {
             onPlay={()=>setPlaying(true)} onPause={()=>setPlaying(false)}
             onTimeUpdate={()=>setCurrent(videoRef.current?.currentTime||0)}
             onLoadedMetadata={()=>setDuration(videoRef.current?.duration||0)}
-            onError={()=>sourceName&&setError("The browser could not play this media. The codec/container may not be supported, or the remote server may block browser playback.")}
+            onError={(e)=>{
+              const v=e.currentTarget;
+              if (!v.error || v.readyState >= 2) return;
+              setError("The browser could not play this media. The codec/container may not be supported, or the remote server may block browser playback.");
+            }}
             onClick={togglePlay}
             playsInline
           >
