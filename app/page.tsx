@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 
 type AudioTrack = { id: number; name?: string; lang?: string; groupId?: string };
+type SubtitleTrack = { id: number; name?: string; lang?: string };
 
 const fmt = (n: number) => {
   if (!Number.isFinite(n)) return "00:00";
@@ -44,6 +45,8 @@ export default function Home() {
   const [subtitleUrl, setSubtitleUrl] = useState("");
   const [audioTracks, setAudioTracks] = useState<AudioTrack[]>([]);
   const [activeAudio, setActiveAudio] = useState(-1);
+  const [subtitleTracks, setSubtitleTracks] = useState<SubtitleTrack[]>([]);
+  const [activeSubtitle, setActiveSubtitle] = useState(-1);
   const [menu, setMenu] = useState<"settings"|"audio"|"subtitle"|"speed"|null>(null);
   const [showHelp, setShowHelp] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -60,7 +63,7 @@ export default function Home() {
     const v = videoRef.current;
     if (!v) return;
     setError(""); setSourceName(name); setSourceKind(kind); setCurrent(0); setDuration(0);
-    setAudioTracks([]); setActiveAudio(-1); setPlaying(false);
+    setAudioTracks([]); setActiveAudio(-1); setSubtitleTracks([]); setActiveSubtitle(-1); setPlaying(false);
 
     if (kind === "hls") {
       if (Hls.isSupported()) {
@@ -70,6 +73,10 @@ export default function Home() {
           setAudioTracks((data.audioTracks || []).map((t: any) => ({ id: t.id, name: t.name, lang: t.lang, groupId: t.groupId })));
         });
         hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, (_e, data) => setActiveAudio(data.id));
+        hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, (_e, data) => {
+          setSubtitleTracks((data.subtitleTracks || []).map((t: any) => ({ id: t.id, name: t.name, lang: t.lang })));
+        });
+        hls.on(Hls.Events.SUBTITLE_TRACK_SWITCH, (_e, data) => setActiveSubtitle(data.id));
         hls.on(Hls.Events.ERROR, (_e, data) => {
           if (data.fatal) setError("This stream could not be decoded by the browser. Check the URL, CORS, or codec.");
         });
@@ -149,6 +156,26 @@ export default function Home() {
     if (hls) { hls.audioTrack = id; setActiveAudio(id); }
     setMenu(null);
   };
+  const selectSubtitle = (id: number) => {
+    const hls = hlsRef.current;
+    const v = videoRef.current;
+    if (hls) {
+      hls.subtitleTrack = id;
+      setActiveSubtitle(id);
+    } else if (v) {
+      Array.from(v.textTracks).forEach((track, index) => { track.mode = index === id ? "showing" : "disabled"; });
+      setActiveSubtitle(id);
+    }
+    setMenu(null);
+  };
+  const disableSubtitle = () => {
+    const hls = hlsRef.current;
+    const v = videoRef.current;
+    if (hls) hls.subtitleTrack = -1;
+    if (v) Array.from(v.textTracks).forEach(track => { track.mode = "disabled"; });
+    setActiveSubtitle(-1);
+    setMenu(null);
+  };
 
   return (
     <main>
@@ -225,7 +252,12 @@ export default function Home() {
             </div>
             {menu==="speed" && <div className="menu-pop speed-pop">{[.5,.75,1,1.25,1.5,2].map(n=><button key={n} className={rate===n?"selected":""} onClick={()=>setSpeed(n)}>{n}x</button>)}</div>}
             {menu==="audio" && <div className="menu-pop"><strong>Audio tracks</strong>{audioTracks.map(t=><button key={t.id} className={activeAudio===t.id?"selected":""} onClick={()=>selectAudio(t.id)}>{t.name||t.lang||`Track ${t.id+1}`}</button>)}</div>}
-            {menu==="subtitle" && <div className="menu-pop"><strong>Subtitles</strong><label className="upload-sub">Add .srt / .vtt<input type="file" accept=".srt,.vtt,text/vtt,application/x-subrip" onChange={subtitleFile}/></label>{subtitleName&&<button className="selected" onClick={()=>setMenu(null)}>{subtitleName}</button>}</div>}
+            {menu==="subtitle" && <div className="menu-pop"><strong>Subtitles</strong>
+              {subtitleTracks.map(t=><button key={t.id} className={activeSubtitle===t.id?"selected":""} onClick={()=>selectSubtitle(t.id)}>{t.name||t.lang||`Track ${t.id+1}`} <small>stream</small></button>)}
+              {subtitleTracks.length>0 && <button onClick={disableSubtitle}>Off</button>}
+              <label className="upload-sub">Add .srt / .vtt<input type="file" accept=".srt,.vtt,text/vtt,application/x-subrip" onChange={subtitleFile}/></label>
+              {subtitleName&&<button className="selected" onClick={()=>setMenu(null)}>{subtitleName}</button>}
+            </div>}
           </div>
         </div>
 
