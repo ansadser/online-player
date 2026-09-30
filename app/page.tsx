@@ -77,6 +77,7 @@ export default function Home() {
           setSubtitleTracks((data.subtitleTracks || []).map((t: any) => ({ id: t.id, name: t.name, lang: t.lang })));
         });
         hls.on(Hls.Events.SUBTITLE_TRACK_SWITCH, (_e, data) => setActiveSubtitle(data.id));
+        hls.on(Hls.Events.SUBTITLE_TRACK_LOADED, () => syncNativeSubtitleTracks());
         hls.on(Hls.Events.ERROR, (_e, data) => {
           if (data.fatal) setError("This stream could not be decoded by the browser. Check the URL, CORS, or codec.");
         });
@@ -93,6 +94,14 @@ export default function Home() {
     }
     try { await v.play(); } catch {}
   };
+
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const onTrack = () => syncNativeSubtitleTracks();
+    v.textTracks.addEventListener?.("addtrack", onTrack);
+    return () => v.textTracks.removeEventListener?.("addtrack", onTrack);
+  }, []);
 
   useEffect(() => () => cleanup(), []);
 
@@ -159,7 +168,7 @@ export default function Home() {
   const syncNativeSubtitleTracks = () => {
     const tracks = videoRef.current?.textTracks;
     if (!tracks) return;
-    const items = Array.from(tracks).map((t, id) => ({ id, name: t.label, lang: t.language }));
+    const items = Array.from(tracks).map((t, id) => ({ id, name: t.label || (t.kind === "captions" ? "Captions" : "Subtitles"), lang: t.language }));
     if (items.length) setSubtitleTracks(items);
   };
   const selectSubtitle = (id: number) => {
@@ -212,6 +221,7 @@ export default function Home() {
         <div className="player-shell">
           <video
             ref={videoRef}
+            crossOrigin="anonymous"
             onPlay={()=>{setPlaying(true);setError("")}}
             onPlaying={()=>setError("")}
             onCanPlay={()=>setError("")}
