@@ -170,13 +170,19 @@ export default function Home() {
         <div className="player-shell">
           <video
             ref={videoRef}
-            onPlay={()=>setPlaying(true)} onPause={()=>setPlaying(false)}
-            onTimeUpdate={()=>setCurrent(videoRef.current?.currentTime||0)}
+            onPlay={()=>{setPlaying(true);setError("")}}
+            onPlaying={()=>setError("")}
+            onCanPlay={()=>setError("")}
+            onPause={()=>setPlaying(false)}
+            onTimeUpdate={()=>{setCurrent(videoRef.current?.currentTime||0);setError("")}}
             onLoadedMetadata={()=>setDuration(videoRef.current?.duration||0)}
             onError={(e)=>{
               const v=e.currentTarget;
-              if (!v.error || v.readyState >= 2) return;
-              setError("The browser could not play this media. The codec/container may not be supported, or the remote server may block browser playback.");
+              window.setTimeout(()=>{
+                if (v.paused && v.readyState === 0 && v.networkState === HTMLMediaElement.NETWORK_NO_SOURCE) {
+                  setError("This media could not be opened by the browser. Check the URL, CORS, or codec/container support.");
+                }
+              },400);
             }}
             onClick={togglePlay}
             playsInline
