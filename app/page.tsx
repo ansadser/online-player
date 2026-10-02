@@ -124,7 +124,12 @@ export default function Home() {
   const loadUrl = () => {
     const clean = url.trim();
     if (!clean) return;
-    const isHls = /\\.m3u8(?:$|[?#])/i.test(clean);
+    let isHls = /\\.m3u8(?:$|[?#])/i.test(clean);
+    try {
+      const parsed = new URL(clean);
+      // Some streaming servers expose HLS manifests through extensionless /stream/... URLs.
+      isHls = isHls || /\\/stream(?:\\/|$)/i.test(parsed.pathname);
+    } catch {}
     playSource(clean, clean.split("/").pop()?.split("?")[0] || "Stream", isHls ? "hls" : "url");
   };
 
