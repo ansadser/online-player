@@ -179,14 +179,21 @@ export default function Home() {
         hls.on(Hls.Events.SUBTITLE_TRACK_LOADED, () => syncNativeSubtitleTracks());
         hls.on(Hls.Events.ERROR, (_e, data) => {
           if (!data.fatal) return;
-          // An extensionless /stream URL may actually be a normal media file.
-          // Give the browser's native pipeline a chance before showing an error.
+          // Some extensionless /stream URLs are direct media rather than HLS.
+          // Try the browser pipeline first, then use the 8-bit FFmpeg/WASM
+          // fallback if the browser cannot decode/open the response.
           hls.destroy();
           hlsRef.current = null;
           v.src = src;
           void v.play().catch(() => {});
           window.setTimeout(() => {
-            if (v.readyState === 0) setError("This stream could not be opened. Check the URL, CORS, or codec/container support.");
+            if (v.readyState === 0) {
+              void tryWasmFallback(src).then(ok => {
+                if (!ok && !fallbackBusyRef.current) {
+                  setError("This stream could not be opened. Check the URL, CORS, or codec/container support.");
+                }
+              });
+            }
           }, 1200);
         });
         hls.attachMedia(v);
