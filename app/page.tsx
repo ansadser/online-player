@@ -67,10 +67,11 @@ export default function Home() {
 
     if (kind === "hls") {
       if (Hls.isSupported()) {
-        const hls = new Hls({ enableWorker: true });
+        const hls = new Hls({ enableWorker: true, lowLatencyMode: false });
         hlsRef.current = hls;
         hls.on(Hls.Events.MANIFEST_PARSED, (_e, data) => {
           setAudioTracks((data.audioTracks || []).map((t: any) => ({ id: t.id, name: t.name, lang: t.lang, groupId: t.groupId })));
+          void v.play().catch(() => {});
         });
         hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, (_e, data) => setActiveAudio(data.id));
         hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, (_e, data) => {
@@ -79,20 +80,30 @@ export default function Home() {
         hls.on(Hls.Events.SUBTITLE_TRACK_SWITCH, (_e, data) => setActiveSubtitle(data.id));
         hls.on(Hls.Events.SUBTITLE_TRACK_LOADED, () => syncNativeSubtitleTracks());
         hls.on(Hls.Events.ERROR, (_e, data) => {
-          if (data.fatal) setError("This stream could not be decoded by the browser. Check the URL, CORS, or codec.");
+          if (!data.fatal) return;
+          // An extensionless /stream URL may actually be a normal media file.
+          // Give the browser's native pipeline a chance before showing an error.
+          hls.destroy();
+          hlsRef.current = null;
+          v.src = src;
+          void v.play().catch(() => {});
+          window.setTimeout(() => {
+            if (v.readyState === 0) setError("This stream could not be opened. Check the URL, CORS, or codec/container support.");
+          }, 1200);
         });
-        hls.loadSource(src);
         hls.attachMedia(v);
+        hls.loadSource(src);
       } else if (v.canPlayType("application/vnd.apple.mpegurl")) {
         v.src = src;
+        void v.play().catch(() => {});
       } else {
         setError("This browser does not support HLS playback.");
         return;
       }
     } else {
       v.src = src;
+      void v.play().catch(() => {});
     }
-    try { await v.play(); } catch {}
   };
 
   useEffect(() => {
