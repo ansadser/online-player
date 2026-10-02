@@ -103,7 +103,7 @@ export default function Home() {
       const ext = inputName.includes(".") ? inputName.slice(inputName.lastIndexOf(".")) : ".mkv";
       const inputFile = `input${ext}`;
       await ffmpeg.writeFile(inputFile, await fetchFile(input));
-      setDecoderStatus("Decoding 8/10-bit media…");
+      setDecoderStatus("Decoding 8-bit media…");
       await ffmpeg.exec([
         "-i", inputFile,
         "-map", "0:v:0",
@@ -396,9 +396,9 @@ export default function Home() {
 
         <div className="below-player">
           <div><span className="status-dot"/>{sourceKind==="hls"?"HLS STREAM":sourceKind==="url"?"REMOTE MEDIA":sourceKind==="local"?"LOCAL MEDIA":"READY"} {sourceName && <b>· {sourceName}</b>}</div>
-          <div className="capabilities"><span>8-bit</span><span>10-bit*</span><span>HLS</span><span>VTT / SRT</span><span>Multi-audio</span></div>
+          <div className="capabilities"><span>8-bit</span><span>HLS</span><span>VTT / SRT</span><span>Multi-audio</span></div>
         </div>
-        <p className="codec-note">* 8-bit and 10-bit playback depends on the browser/device decoder and the exact codec profile. The player uses the browser's native media pipeline rather than transcoding your file.</p>
+        <p className="codec-note">8-bit playback depends on the browser/device decoder and the exact codec profile. The player targets a simple 8-bit browser-compatible output path.</p>
       </section>
 
       <section className="features">
@@ -410,7 +410,7 @@ export default function Home() {
 
       <footer><div className="brand"><div className="brand-mark"><Play size={15} fill="currentColor"/></div><span>ONLINE<span>PLAYER</span></span></div><small>Browser-first media playback · No upload by default</small></footer>
 
-      {showHelp && <div className="modal-backdrop" onClick={()=>setShowHelp(false)}><div className="modal" onClick={e=>e.stopPropagation()}><button className="modal-x" onClick={()=>setShowHelp(false)}><X/></button><h2>Media support</h2><p>This player relies on the browser's media decoder, so exact support varies by device and browser.</p><ul><li>MP4 / WebM and common browser codecs</li><li>HLS .m3u8 via HLS.js or native HLS</li><li>8-bit and supported 10-bit profiles</li><li>SRT converted to WebVTT locally</li><li>Multiple HLS audio tracks</li></ul><p className="muted">If a VLC-only codec does not play, the browser itself needs a compatible decoder; this app does not secretly transcode your media.</p></div></div>}
+      {showHelp && <div className="modal-backdrop" onClick={()=>setShowHelp(false)}><div className="modal" onClick={e=>e.stopPropagation()}><button className="modal-x" onClick={()=>setShowHelp(false)}><X/></button><h2>Media support</h2><p>This player relies on the browser's media decoder, so exact support varies by device and browser.</p><ul><li>MP4 / WebM and common browser codecs</li><li>HLS .m3u8 via HLS.js or native HLS</li><li>8-bit browser-compatible media</li><li>SRT converted to WebVTT locally</li><li>Multiple HLS audio tracks</li></ul><p className="muted">If a VLC-only codec does not play, the browser itself needs a compatible decoder; this app does not secretly transcode your media.</p></div></div>}
     </main>
   );
 }
