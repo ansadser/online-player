@@ -359,6 +359,7 @@ export default function Home() {
           </video>
 
           {!sourceName && <div className="empty-player"><div className="empty-icon"><Film size={34}/></div><h2>Ready when you are</h2><p>Drop a video here, open a local file, or paste a stream URL above.</p></div>}
+          {decoderStatus && <div className="decoder-status"><strong>{decoderStatus}</strong>{decoderProgress > 0 && decoderProgress < 1 && <span>{Math.round(decoderProgress * 100)}%</span>}</div>}
           {error && <div className="player-error"><strong>Playback error</strong><span>{error}</span></div>}
 
           <div className="controls">
