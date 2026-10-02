@@ -128,7 +128,7 @@ export default function Home() {
     try {
       const parsed = new URL(clean);
       // Some streaming servers expose HLS manifests through extensionless /stream/... URLs.
-      isHls = isHls || /\\/stream(?:\\/|$)/i.test(parsed.pathname);
+      isHls = isHls || parsed.pathname.toLowerCase().includes("/stream/");
     } catch {}
     playSource(clean, clean.split("/").pop()?.split("?")[0] || "Stream", isHls ? "hls" : "url");
   };
