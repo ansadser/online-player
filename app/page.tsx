@@ -2,6 +2,8 @@
 
 import { ChangeEvent, useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
+import { FFmpeg } from "@ffmpeg/ffmpeg";
+import { fetchFile, toBlobURL } from "@ffmpeg/util";
 import {
   Captions, ChevronDown, FileVideo, Film, Gauge, Headphones, Link2,
   Maximize, Menu, Pause, PictureInPicture2, Play, RotateCcw, Settings,
@@ -28,6 +30,9 @@ export default function Home() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const urlInputRef = useRef<HTMLInputElement>(null);
+  const ffmpegRef = useRef<FFmpeg | null>(null);
+  const fallbackInputRef = useRef<File | null>(null);
+  const fallbackBusyRef = useRef(false);
 
   const [url, setUrl] = useState("");
   const [sourceName, setSourceName] = useState("");
@@ -50,6 +55,8 @@ export default function Home() {
   const [menu, setMenu] = useState<"settings"|"audio"|"subtitle"|"speed"|null>(null);
   const [showHelp, setShowHelp] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [decoderStatus, setDecoderStatus] = useState("");
+  const [decoderProgress, setDecoderProgress] = useState(0);
 
   const video = videoRef.current;
 
@@ -58,12 +65,103 @@ export default function Home() {
     hlsRef.current = null;
   };
 
+  const loadWasmDecoder = async () => {
+    if (ffmpegRef.current) return ffmpegRef.current;
+    const ffmpeg = new FFmpeg();
+    ffmpeg.on("progress", ({ progress }) => setDecoderProgress(Math.max(0, Math.min(1, progress))));
+    const baseURL = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd";
+    setDecoderStatus("Loading VLC-style decoder…");
+    await ffmpeg.load({
+      coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
+      wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
+    });
+    ffmpegRef.current = ffmpeg;
+    return ffmpeg;
+  };
+
+  const tryWasmFallback = async (remoteUrl?: string) => {
+    if (fallbackBusyRef.current) return false;
+    if (sourceKind === "hls" && remoteUrl && /\\.m3u8(?:$|[?#])/i.test(remoteUrl)) return false;
+    fallbackBusyRef.current = true;
+    setError("");
+    setDecoderProgress(0);
+    try {
+      let input: File | Blob | null = fallbackInputRef.current;
+      let inputName = fallbackInputRef.current?.name || "stream.mkv";
+      if (!input && remoteUrl) {
+        setDecoderStatus("Downloading media for VLC-style decoding…");
+        const response = await fetch(remoteUrl, { mode: "cors" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const type = response.headers.get("content-type") || "";
+        if (type.includes("mpegurl") || type.includes("application/vnd.apple.mpegurl") || type.startsWith("text/")) return false;
+        input = await response.blob();
+        const ext = type.includes("mp4") ? ".mp4" : type.includes("webm") ? ".webm" : type.includes("matroska") ? ".mkv" : ".mkv";
+        inputName = `stream${ext}`;
+      }
+      if (!input) return false;
+      const ffmpeg = await loadWasmDecoder();
+      const ext = inputName.includes(".") ? inputName.slice(inputName.lastIndexOf(".")) : ".mkv";
+      const inputFile = `input${ext}`;
+      await ffmpeg.writeFile(inputFile, await fetchFile(input));
+      setDecoderStatus("Decoding 8/10-bit media…");
+      await ffmpeg.exec([
+        "-i", inputFile,
+        "-map", "0:v:0",
+        "-map", "0:a:0?",
+        "-c:v", "libx264",
+        "-preset", "ultrafast",
+        "-crf", "24",
+        "-pix_fmt", "yuv420p",
+        "-c:a", "aac",
+        "-b:a", "160k",
+        "-movflags", "+faststart",
+        "decoded.mp4",
+      ]);
+      const data = await ffmpeg.readFile("decoded.mp4");
+      const bytes = typeof data === "string" ? new TextEncoder().encode(data) : new Uint8Array(data);
+      const objectUrl = URL.createObjectURL(new Blob([bytes], { type: "video/mp4" }));
+      vSetSrc(objectUrl, "VLC/WASM decoded");
+      try {
+        await ffmpeg.exec(["-i", inputFile, "-map", "0:s:0?", "-c:s", "webvtt", "subtitle.vtt"]);
+        const sub = await ffmpeg.readFile("subtitle.vtt");
+        const subBytes = typeof sub === "string" ? new TextEncoder().encode(sub) : new Uint8Array(sub);
+        if (subtitleUrl) URL.revokeObjectURL(subtitleUrl);
+        setSubtitleUrl(URL.createObjectURL(new Blob([subBytes], { type: "text/vtt" })));
+        setSubtitleName("Embedded subtitle");
+      } catch {}
+      setDecoderStatus("VLC/WASM decoded");
+      setError("");
+      await videoRef.current?.play().catch(() => {});
+      return true;
+    } catch (err) {
+      setDecoderStatus("");
+      setError(err instanceof Error ? `VLC-style decoder failed: ${err.message}` : "VLC-style decoder could not open this media.");
+      return false;
+    } finally {
+      fallbackBusyRef.current = false;
+    }
+  };
+
+  const vSetSrc = (src: string, name: string) => {
+    const v = videoRef.current;
+    if (!v) return;
+    cleanup();
+    v.src = src;
+    setSourceName(name);
+    setSourceKind("url");
+    setDuration(0);
+    setCurrent(0);
+    setPlaying(false);
+  };
+
   const playSource = async (src: string, name: string, kind: "local"|"url"|"hls") => {
     cleanup();
     const v = videoRef.current;
     if (!v) return;
     setError(""); setSourceName(name); setSourceKind(kind); setCurrent(0); setDuration(0);
     setAudioTracks([]); setActiveAudio(-1); setSubtitleTracks([]); setActiveSubtitle(-1); setPlaying(false);
+
+    fallbackInputRef.current = kind === "local" ? fallbackInputRef.current : null;
 
     if (kind === "hls") {
       if (Hls.isSupported()) {
@@ -119,6 +217,7 @@ export default function Home() {
   const localVideo = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    fallbackInputRef.current = file;
     playSource(URL.createObjectURL(file), file.name, "local");
   };
 
@@ -141,6 +240,7 @@ export default function Home() {
       // Some streaming servers expose HLS manifests through extensionless /stream/... URLs.
       isHls = isHls || parsed.pathname.toLowerCase().includes("/stream/");
     } catch {}
+    fallbackInputRef.current = null;
     playSource(clean, clean.split("/").pop()?.split("?")[0] || "Stream", isHls ? "hls" : "url");
   };
 
@@ -248,7 +348,7 @@ export default function Home() {
               const v=e.currentTarget;
               window.setTimeout(()=>{
                 if (v.paused && v.readyState === 0 && v.networkState === HTMLMediaElement.NETWORK_NO_SOURCE) {
-                  setError("This media could not be opened by the browser. Check the URL, CORS, or codec/container support.");
+                  void tryWasmFallback(sourceKind === "url" ? url : undefined);
                 }
               },400);
             }}
