@@ -238,16 +238,41 @@ export default function Home() {
     setSubtitleUrl(blobUrl); setSubtitleName(file.name);
   };
 
-  const loadUrl = () => {
+  const loadUrl = async () => {
     const clean = url.trim();
     if (!clean) return;
+
+    // Only explicit .m3u8 URLs are assumed to be HLS. Extensionless
+    // /stream/... endpoints are probed first because many servers return
+    // a direct MP4/MKV/TS file from the same kind of path.
     let isHls = /\\.m3u8(?:$|[?#])/i.test(clean);
-    try {
-      const parsed = new URL(clean);
-      // Some streaming servers expose HLS manifests through extensionless /stream/... URLs.
-      isHls = isHls || parsed.pathname.toLowerCase().includes("/stream/");
-    } catch {}
+    if (!isHls) {
+      try {
+        const parsed = new URL(clean);
+        if (parsed.pathname.toLowerCase().includes("/stream/")) {
+          const controller = new AbortController();
+          const timer = window.setTimeout(() => controller.abort(), 3500);
+          try {
+            const response = await fetch(clean, {
+              method: "GET",
+              headers: { Range: "bytes=0-1023" },
+              mode: "cors",
+              signal: controller.signal,
+            });
+            const type = (response.headers.get("content-type") || "").toLowerCase();
+            isHls = type.includes("mpegurl") || type.includes("vnd.apple.mpegurl");
+          } catch {
+            // If probing is blocked by CORS, let native playback try the URL.
+            isHls = false;
+          } finally {
+            window.clearTimeout(timer);
+          }
+        }
+      } catch {}
+    }
+
     fallbackInputRef.current = null;
+    setDecoderStatus("");
     playSource(clean, clean.split("/").pop()?.split("?")[0] || "Stream", isHls ? "hls" : "url");
   };
 
